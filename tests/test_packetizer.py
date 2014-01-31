@@ -22,7 +22,10 @@ Some unit tests for the ssh2 protocol in Transport.
 
 import unittest
 from loop import LoopSocket
-from Crypto.Cipher import AES
+from cryptography.hazmat.backends.commoncrypto.backend import backend
+from cryptography.hazmat.primitives.ciphers.base import Cipher
+from cryptography.hazmat.primitives.ciphers.algorithms import AES
+from cryptography.hazmat.primitives.ciphers.modes import CBC, CTR
 from cryptography.hazmat.primitives.hashes import SHA1
 from paramiko import Message, Packetizer, util
 
@@ -35,8 +38,9 @@ class PacketizerTest (unittest.TestCase):
         p = Packetizer(wsock)
         p.set_log(util.get_logger('paramiko.transport'))
         p.set_hexdump(True)
-        cipher = AES.new('\x00' * 16, AES.MODE_CBC, '\x55' * 16)
-        p.set_outbound_cipher(cipher, 16, SHA1, 12, '\x1f' * 20)
+        cipher = Cipher(AES('\x00' * 16), CBC('\x55' * 16), backend)
+        encryptor = cipher.encryptor()
+        p.set_outbound_cipher(encryptor, 16, SHA1, 12, '\x1f' * 20)
 
         # message has to be at least 16 bytes long, so we'll have at least one
         # block of data encrypted that contains zero random padding bytes
@@ -58,8 +62,9 @@ class PacketizerTest (unittest.TestCase):
         p = Packetizer(rsock)
         p.set_log(util.get_logger('paramiko.transport'))
         p.set_hexdump(True)
-        cipher = AES.new('\x00' * 16, AES.MODE_CBC, '\x55' * 16)
-        p.set_inbound_cipher(cipher, 16, SHA1, 12, '\x1f' * 20)
+        cipher = Cipher(AES('\x00' * 16), CBC('\x55' * 16), backend)
+        decryptor = cipher.decryptor()
+        p.set_inbound_cipher(decryptor, 16, SHA1, 12, '\x1f' * 20)
 
         wsock.send('C\x91\x97\xbd[P\xac%\x87\xc2\xc4k\xc7\xe98\xc0' + \
                    '\x90\xd2\x16V\rqsa8|L=\xfb\x97}\xe2n\x03\xb1\xa0\xc2\x1c\xd6AAL\xb4Y')

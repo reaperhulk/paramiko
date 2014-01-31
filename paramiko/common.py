@@ -97,7 +97,7 @@ DISCONNECT_SERVICE_NOT_AVAILABLE, DISCONNECT_AUTH_CANCELLED_BY_USER, \
 
 from Crypto import Random
 
-from cryptography.hazmat.backends.openssl.backend import backend
+from cryptography.hazmat.backends.commoncrypto.backend import backend
 
 # keep a crypto-strong PRNG nearby
 rng = Random.new()
