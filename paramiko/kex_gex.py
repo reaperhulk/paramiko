@@ -22,8 +22,7 @@ generator "g" are provided by the server.  A bit more work is required on the
 client side, and a B{lot} more on the server side.
 """
 
-from Crypto.Hash import SHA
-from Crypto.Util import number
+from cryptography.hazmat.primitives.hashes import SHA1, Hash
 
 from paramiko.common import *
 from paramiko import util
@@ -89,7 +88,7 @@ class KexGex (object):
 
     ###  internals...
 
-    
+
     def _generate_x(self):
         # generate an "x" (1 < x < (p-1)/2).
         q = (self.p - 1) // 2
@@ -203,7 +202,9 @@ class KexGex (object):
         hm.add_mpint(self.e)
         hm.add_mpint(self.f)
         hm.add_mpint(K)
-        H = SHA.new(str(hm)).digest()
+        digest = Hash(SHA1(), backend)
+        digest.update(str(hm))
+        H = digest.finalize()
         self.transport._set_K_H(K, H)
         # sign it
         sig = self.transport.get_server_key().sign_ssh_data(self.transport.rng, H)
@@ -215,7 +216,7 @@ class KexGex (object):
         m.add_string(str(sig))
         self.transport._send_message(m)
         self.transport._activate_outbound()
-        
+
     def _parse_kexdh_gex_reply(self, m):
         host_key = m.get_string()
         self.f = m.get_mpint()
@@ -238,6 +239,9 @@ class KexGex (object):
         hm.add_mpint(self.e)
         hm.add_mpint(self.f)
         hm.add_mpint(K)
-        self.transport._set_K_H(K, SHA.new(str(hm)).digest())
+        digest = Hash(SHA1(), backend)
+        digest.update(str(hm))
+        H = digest.finalize()
+        self.transport._set_K_H(K, H)
         self.transport._verify_key(host_key, sig)
         self.transport._activate_outbound()

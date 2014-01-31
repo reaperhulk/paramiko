@@ -21,8 +21,7 @@ L{RSAKey}
 """
 
 from Crypto.PublicKey import RSA
-from Crypto.Hash import SHA, MD5
-from Crypto.Cipher import DES3
+from cryptography.hazmat.primitives.hashes import SHA1, Hash
 
 from paramiko.common import *
 from paramiko import util
@@ -86,7 +85,9 @@ class RSAKey (PKey):
         return self.d is not None
 
     def sign_ssh_data(self, rpool, data):
-        digest = SHA.new(data).digest()
+        digest = Hash(SHA1(), backend)
+        digest.update(data)
+        digest = digest.finalize()
         rsa = RSA.construct((long(self.n), long(self.e), long(self.d)))
         sig = util.deflate_long(rsa.sign(self._pkcs1imify(digest), '')[0], 0)
         m = Message()
@@ -101,7 +102,10 @@ class RSAKey (PKey):
         # verify the signature by SHA'ing the data and encrypting it using the
         # public key.  some wackiness ensues where we "pkcs1imify" the 20-byte
         # hash into a string as long as the RSA key.
-        hash_obj = util.inflate_long(self._pkcs1imify(SHA.new(data).digest()), True)
+        digest = Hash(SHA1(), backend)
+        digest.update(data)
+        digest = digest.finalize()
+        hash_obj = util.inflate_long(self._pkcs1imify(digest), True)
         rsa = RSA.construct((long(self.n), long(self.e)))
         return rsa.verify(hash_obj, (sig,))
 
@@ -120,7 +124,7 @@ class RSAKey (PKey):
 
     def write_private_key_file(self, filename, password=None):
         self._write_private_key_file('RSA', filename, self._encode_key(), password)
-        
+
     def write_private_key(self, file_obj, password=None):
         self._write_private_key('RSA', file_obj, self._encode_key(), password)
 
@@ -162,11 +166,11 @@ class RSAKey (PKey):
     def _from_private_key_file(self, filename, password):
         data = self._read_private_key_file('RSA', filename, password)
         self._decode_key(data)
-    
+
     def _from_private_key(self, file_obj, password):
         data = self._read_private_key('RSA', file_obj, password)
         self._decode_key(data)
-    
+
     def _decode_key(self, data):
         # private key file contains:
         # RSAPrivateKey = { version = 0, n, e, d, p, q, d mod p-1, d mod q-1, q**-1 mod p }

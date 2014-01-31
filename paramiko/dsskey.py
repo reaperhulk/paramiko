@@ -21,7 +21,7 @@ L{DSSKey}
 """
 
 from Crypto.PublicKey import DSA
-from Crypto.Hash import SHA
+from cryptography.hazmat.primitives.hashes import SHA1, Hash
 
 from paramiko.common import *
 from paramiko import util
@@ -87,12 +87,14 @@ class DSSKey (PKey):
 
     def get_bits(self):
         return self.size
-        
+
     def can_sign(self):
         return self.x is not None
 
     def sign_ssh_data(self, rng, data):
-        digest = SHA.new(data).digest()
+        digest = Hash(SHA1(), backend)
+        digest.update(data)
+        digest = digest.finalize()
         dss = DSA.construct((long(self.y), long(self.g), long(self.p), long(self.q), long(self.x)))
         # generate a suitable k
         qsize = len(util.deflate_long(self.q, 0))
@@ -126,7 +128,10 @@ class DSSKey (PKey):
         # pull out (r, s) which are NOT encoded as mpints
         sigR = util.inflate_long(sig[:20], 1)
         sigS = util.inflate_long(sig[20:], 1)
-        sigM = util.inflate_long(SHA.new(data).digest(), 1)
+        digest = Hash(SHA1(), backend)
+        digest.update(data)
+        digest = digest.finalize()
+        sigM = util.inflate_long(digest, 1)
 
         dss = DSA.construct((long(self.y), long(self.g), long(self.p), long(self.q)))
         return dss.verify(sigM, (sigR, sigS))
@@ -174,11 +179,11 @@ class DSSKey (PKey):
     def _from_private_key_file(self, filename, password):
         data = self._read_private_key_file('DSA', filename, password)
         self._decode_key(data)
-    
+
     def _from_private_key(self, file_obj, password):
         data = self._read_private_key('DSA', file_obj, password)
         self._decode_key(data)
-    
+
     def _decode_key(self, data):
         # private key file contains:
         # DSAPrivateKey = { version = 0, p, q, g, y, x }

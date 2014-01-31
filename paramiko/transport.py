@@ -51,7 +51,7 @@ from paramiko.util import retry_on_signal
 
 from Crypto import Random
 from Crypto.Cipher import Blowfish, AES, DES3, ARC4
-from Crypto.Hash import SHA, MD5
+from cryptography.hazmat.primitives.hashes import SHA1, MD5, Hash
 try:
     from Crypto.Util import Counter
 except ImportError:
@@ -219,8 +219,8 @@ class Transport (threading.Thread):
         }
 
     _mac_info = {
-        'hmac-sha1': { 'class': SHA, 'size': 20 },
-        'hmac-sha1-96': { 'class': SHA, 'size': 12 },
+        'hmac-sha1': { 'class': SHA1, 'size': 20 },
+        'hmac-sha1-96': { 'class': SHA1, 'size': 12 },
         'hmac-md5': { 'class': MD5, 'size': 16 },
         'hmac-md5-96': { 'class': MD5, 'size': 12 },
         }
@@ -1485,13 +1485,17 @@ class Transport (threading.Thread):
         m.add_bytes(self.H)
         m.add_byte(id)
         m.add_bytes(self.session_id)
-        out = sofar = SHA.new(str(m)).digest()
+        digest = Hash(SHA1(), backend)
+        digest.update(str(m))
+        out = sofar = digest.finalize()
         while len(out) < nbytes:
             m = Message()
             m.add_mpint(self.K)
             m.add_bytes(self.H)
             m.add_bytes(sofar)
-            digest = SHA.new(str(m)).digest()
+            digest = Hash(SHA1(), backend)
+            digest.update(str(m))
+            digest = digest.finalize()
             out += digest
             sofar += digest
         return out[:nbytes]

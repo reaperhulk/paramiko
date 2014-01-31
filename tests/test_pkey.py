@@ -86,7 +86,7 @@ class KeyTest (unittest.TestCase):
         pass
 
     def test_1_generate_key_bytes(self):
-        from Crypto.Hash import MD5
+        from cryptography.hazmat.primitives.hashes import MD5
         key = util.generate_key_bytes(MD5, '\x01\x02\x03\x04', 'happy birthday', 30)
         exp = unhexlify('61E1F272F4C1C4561586BD322498C0E924672780F47BB37DDA7D54019E64')
         self.assertEquals(exp, key)
@@ -102,7 +102,7 @@ class KeyTest (unittest.TestCase):
 
         s = StringIO.StringIO()
         key.write_private_key(s)
-        self.assertEquals(RSA_PRIVATE_OUT, s.getvalue()) 
+        self.assertEquals(RSA_PRIVATE_OUT, s.getvalue())
         s.seek(0)
         key2 = RSAKey.from_private_key(s)
         self.assertEquals(key, key2)
@@ -115,7 +115,7 @@ class KeyTest (unittest.TestCase):
         self.assertEquals(exp_rsa, my_rsa)
         self.assertEquals(PUB_RSA.split()[1], key.get_base64())
         self.assertEquals(1024, key.get_bits())
-        
+
     def test_4_load_dss(self):
         key = DSSKey.from_private_key_file('tests/test_dss.key')
         self.assertEquals('ssh-dss', key.get_name())

@@ -23,7 +23,7 @@ Server-mode SFTP support.
 import os
 import errno
 
-from Crypto.Hash import MD5, SHA
+from cryptography.hazmat.primitives.hashes import SHA1, MD5, Hash
 from paramiko.common import *
 from paramiko.server import SubsystemHandler
 from paramiko.sftp import *
@@ -33,7 +33,7 @@ from paramiko.sftp_attr import *
 
 # known hash algorithms for the "check-file" extension
 _hash_class = {
-    'sha1': SHA,
+    'sha1': SHA1,
     'md5': MD5,
 }
 
@@ -73,14 +73,14 @@ class SFTPServer (BaseSFTP, SubsystemHandler):
         self.file_table = { }
         self.folder_table = { }
         self.server = sftp_si(server, *largs, **kwargs)
-        
+
     def _log(self, level, msg):
         if issubclass(type(msg), list):
             for m in msg:
                 super(SFTPServer, self)._log(level, "[chan " + self.sock.get_name() + "] " + m)
         else:
             super(SFTPServer, self)._log(level, "[chan " + self.sock.get_name() + "] " + msg)
-        
+
     def start_subsystem(self, name, transport, channel):
         self.sock = channel
         self._log(DEBUG, 'Started sftp server on channel %s' % repr(channel))
@@ -150,7 +150,7 @@ class SFTPServer (BaseSFTP, SubsystemHandler):
 
         This is meant to be a handy helper function for translating SFTP file
         requests into local file operations.
-        
+
         @param filename: name of the file to alter (should usually be an
             absolute path).
         @type filename: str
@@ -277,7 +277,7 @@ class SFTPServer (BaseSFTP, SubsystemHandler):
             # don't try to read more than about 64KB at a time
             chunklen = min(blocklen, 65536)
             count = 0
-            hash_obj = alg.new()
+            hash_obj = Hash(alg(), backend)
             while count < blocklen:
                 data = f.read(offset, chunklen)
                 if not type(data) is str:
@@ -286,7 +286,7 @@ class SFTPServer (BaseSFTP, SubsystemHandler):
                 hash_obj.update(data)
                 count += len(data)
                 offset += count
-            sum_out += hash_obj.digest()
+            sum_out += hash_obj.finalize()
 
         msg = Message()
         msg.add_int(request_number)
@@ -294,7 +294,7 @@ class SFTPServer (BaseSFTP, SubsystemHandler):
         msg.add_string(algname)
         msg.add_bytes(sum_out)
         self._send_packet(CMD_EXTENDED_REPLY, str(msg))
-    
+
     def _convert_pflags(self, pflags):
         "convert SFTP-style open() flags to python's os.open() flags"
         if (pflags & SFTP_FLAG_READ) and (pflags & SFTP_FLAG_WRITE):

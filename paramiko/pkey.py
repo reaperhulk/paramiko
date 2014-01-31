@@ -24,7 +24,7 @@ import base64
 from binascii import hexlify, unhexlify
 import os
 
-from Crypto.Hash import MD5
+from cryptography.hazmat.primitives.hashes import MD5, Hash
 from Crypto.Cipher import DES3, AES
 
 from paramiko.common import *
@@ -131,7 +131,9 @@ class PKey (object):
             format.
         @rtype: str
         """
-        return MD5.new(str(self)).digest()
+        digest = Hash(MD5(), backend)
+        digest.update(str(self))
+        return digest.finalize()
 
     def get_base64(self):
         """

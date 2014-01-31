@@ -30,6 +30,8 @@ import struct
 import traceback
 import threading
 
+from cryptography.hazmat.primitives.hashes import Hash
+
 from paramiko.common import *
 from paramiko.config import SSHConfig
 
@@ -171,12 +173,12 @@ def generate_key_bytes(hashclass, salt, key, nbytes):
     if len(salt) > 8:
         salt = salt[:8]
     while nbytes > 0:
-        hash_obj = hashclass.new()
+        hash_obj = Hash(hashclass(), backend)
         if len(digest) > 0:
             hash_obj.update(digest)
         hash_obj.update(key)
         hash_obj.update(salt)
-        digest = hash_obj.digest()
+        digest = hash_obj.finalize()
         size = min(nbytes, len(digest))
         keydata += digest[:size]
         nbytes -= size

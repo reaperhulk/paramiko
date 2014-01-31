@@ -23,8 +23,7 @@ L{ECDSAKey}
 import binascii
 from ecdsa import SigningKey, VerifyingKey, der, curves
 from ecdsa.util import number_to_string, sigencode_string, sigencode_strings, sigdecode_strings
-from Crypto.Hash import SHA256, MD5
-from Crypto.Cipher import DES3
+from cryptography.hazmat.primitives.hashes import SHA256, Hash
 
 from paramiko.common import *
 from paramiko import util
@@ -97,7 +96,9 @@ class ECDSAKey (PKey):
         return self.signing_key is not None
 
     def sign_ssh_data(self, rpool, data):
-        digest = SHA256.new(data).digest()
+        digest = Hash(SHA256(), backend)
+        digest.update(data)
+        digest = digest.finalize()
         sig = self.signing_key.sign_digest(digest, entropy=rpool.read,
                                            sigencode=self._sigencode)
         m = Message()
@@ -112,7 +113,9 @@ class ECDSAKey (PKey):
 
         # verify the signature by SHA'ing the data and encrypting it
         # using the public key.
-        hash_obj = SHA256.new(data).digest()
+        digest = Hash(SHA256(), backend)
+        digest.update(data)
+        hash_obj = digest.finalize()
         return self.verifying_key.verify_digest(sig, hash_obj,
                                                 sigdecode=self._sigdecode)
 

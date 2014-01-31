@@ -22,7 +22,8 @@ L{HostKeys}
 
 import base64
 import binascii
-from Crypto.Hash import SHA, HMAC
+from cryptography.hazmat.primitives.hashes import SHA1
+from cryptography.hazmat.primitives.hmac import HMAC
 import UserDict
 
 from paramiko.common import *
@@ -329,13 +330,16 @@ class HostKeys (UserDict.DictMixin):
         @rtype: str
         """
         if salt is None:
-            salt = rng.read(SHA.digest_size)
+            salt = rng.read(SHA1.digest_size)
         else:
             if salt.startswith('|1|'):
                 salt = salt.split('|')[2]
             salt = base64.decodestring(salt)
-        assert len(salt) == SHA.digest_size
-        hmac = HMAC.HMAC(salt, hostname, SHA).digest()
+        assert len(salt) == SHA1.digest_size
+
+        hmac = HMAC(salt, SHA1(), backend)
+        hmac.update(hostname)
+        hmac = hmac.finalize()
         hostkey = '|1|%s|%s' % (base64.encodestring(salt), base64.encodestring(hmac))
         return hostkey.replace('\n', '')
     hash_host = staticmethod(hash_host)

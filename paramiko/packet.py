@@ -36,10 +36,12 @@ from paramiko.message import Message
 try:
     from r_hmac import HMAC
 except ImportError:
-    from Crypto.Hash.HMAC import HMAC
+    from cryptography.hazmat.primitives.hmac import HMAC
 
 def compute_hmac(key, message, digest_class):
-    return HMAC(key, message, digest_class).digest()
+    hmac = HMAC(key, digest_class(), backend)
+    hmac.update(message)
+    return hmac.finalize()
 
 
 class NeedRekeyException (Exception):
@@ -361,7 +363,7 @@ class Packetizer (object):
                 raise SSHException('Mismatched MAC')
         padding = ord(packet[0])
         payload = packet[1:packet_size - padding]
-        
+
         if self.__dump_packets:
             self._log(DEBUG, 'Got payload (%d bytes, %d padding)' % (packet_size, padding))
 
