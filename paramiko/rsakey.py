@@ -21,9 +21,11 @@ RSA keys.
 """
 
 import os
-from hashlib import sha1
 
-from Crypto.PublicKey import RSA
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from paramiko import util
 from paramiko.common import max_byte, zero_byte, one_byte
@@ -48,6 +50,9 @@ class RSAKey (PKey):
         self.d = None
         self.p = None
         self.q = None
+        self.dmp1 = None
+        self.dmq1 = None
+        self.iqmp = None
         if file_obj is not None:
             self._from_private_key(file_obj, password)
             return
@@ -93,9 +98,16 @@ class RSAKey (PKey):
         return self.d is not None
 
     def sign_ssh_data(self, data):
-        digest = sha1(data).digest()
-        rsa = RSA.construct((long(self.n), long(self.e), long(self.d)))
-        sig = util.deflate_long(rsa.sign(self._pkcs1imify(digest), bytes())[0], 0)
+        key = rsa.RSAPrivateKey(self.p, self.q, self.d, self.dmp1, self.dmq1,
+                                self.iqmp, self.e, self.n)
+        signer = key.signer(
+            padding=padding.PKCS1v15(),
+            algorithm=hashes.SHA1(),
+            backend=default_backend()
+        )
+        signer.update(data)
+        sig = signer.finalize()
+
         m = Message()
         m.add_string('ssh-rsa')
         m.add_string(sig)
@@ -104,13 +116,19 @@ class RSAKey (PKey):
     def verify_ssh_sig(self, data, msg):
         if msg.get_text() != 'ssh-rsa':
             return False
-        sig = util.inflate_long(msg.get_binary(), True)
-        # verify the signature by SHA'ing the data and encrypting it using the
-        # public key.  some wackiness ensues where we "pkcs1imify" the 20-byte
-        # hash into a string as long as the RSA key.
-        hash_obj = util.inflate_long(self._pkcs1imify(sha1(data).digest()), True)
-        rsa = RSA.construct((long(self.n), long(self.e)))
-        return rsa.verify(hash_obj, (sig,))
+        public_key = rsa.RSAPublicKey(self.e, self.n)
+        verifier = public_key.verifier(
+            signature=msg.get_binary(),
+            padding=padding.PKCS1v15(),
+            algorithm=hashes.SHA1(),
+            backend=default_backend()
+        )
+        verifier.update(data)
+        try:
+            verifier.verify()
+            return True
+        except InvalidSignature:
+            return False
 
     def _encode_key(self):
         if (self.p is None) or (self.q is None):
@@ -142,24 +160,18 @@ class RSAKey (PKey):
             by ``pyCrypto.PublicKey``).
         :return: new `.RSAKey` private key
         """
-        rsa = RSA.generate(bits, os.urandom, progress_func)
-        key = RSAKey(vals=(rsa.e, rsa.n))
-        key.d = rsa.d
-        key.p = rsa.p
-        key.q = rsa.q
+        raw_key = rsa.RSAPrivateKey.generate(65537, bits, default_backend())
+        key = RSAKey(vals=(raw_key.e, raw_key.n))
+        key.d = raw_key.d
+        key.p = raw_key.p
+        key.q = raw_key.q
+        key.dmp1 = raw_key.dmp1
+        key.dmq1 = raw_key.dmq1
+        key.iqmp = raw_key.iqmp
         return key
     generate = staticmethod(generate)
 
     ###  internals...
-
-    def _pkcs1imify(self, data):
-        """
-        turn a 20-byte SHA1 hash into a blob of data as large as the key's N,
-        using PKCS1's \"emsa-pkcs1-v1_5\" encoding.  totally bizarre.
-        """
-        size = len(util.deflate_long(self.n, 0))
-        filler = max_byte * (size - len(SHA1_DIGESTINFO) - len(data) - 3)
-        return zero_byte + one_byte + filler + zero_byte + SHA1_DIGESTINFO + data
 
     def _from_private_key_file(self, filename, password):
         data = self._read_private_key_file('RSA', filename, password)
@@ -184,4 +196,7 @@ class RSAKey (PKey):
         # not really needed
         self.p = keylist[4]
         self.q = keylist[5]
+        self.dmp1 = keylist[6]
+        self.dmq1 = keylist[7]
+        self.iqmp = keylist[8]
         self.size = util.bit_length(self.n)

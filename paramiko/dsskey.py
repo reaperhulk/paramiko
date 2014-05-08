@@ -23,7 +23,13 @@ DSS keys.
 import os
 from hashlib import sha1
 
-from Crypto.PublicKey import DSA
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import dsa
+
+from pyasn1.codec.der import encoder, decoder
+from pyasn1.type import namedtype, univ
 
 from paramiko import util
 from paramiko.common import zero_byte
@@ -32,6 +38,13 @@ from paramiko.ssh_exception import SSHException
 from paramiko.message import Message
 from paramiko.ber import BER, BERException
 from paramiko.pkey import PKey
+
+
+class _DSSSigValue(univ.Sequence):
+    componentType = namedtype.NamedTypes(
+        namedtype.NamedType('r', univ.Integer()),
+        namedtype.NamedType('s', univ.Integer())
+    )
 
 
 class DSSKey (PKey):
@@ -98,20 +111,16 @@ class DSSKey (PKey):
         return self.x is not None
 
     def sign_ssh_data(self, data):
-        digest = sha1(data).digest()
-        dss = DSA.construct((long(self.y), long(self.g), long(self.p), long(self.q), long(self.x)))
-        # generate a suitable k
-        qsize = len(util.deflate_long(self.q, 0))
-        while True:
-            k = util.inflate_long(os.urandom(qsize), 1)
-            if (k > 2) and (k < self.q):
-                break
-        r, s = dss.sign(util.inflate_long(digest, 1), k)
+        dss = dsa.DSAPrivateKey(self.p, self.q, self.g, self.x, self.y)
+        signer = dss.signer(hashes.SHA1(), default_backend())
+        signer.update(data)
+        signature = signer.finalize()
         m = Message()
         m.add_string('ssh-dss')
+        r_s = decoder.decode(signature)
         # apparently, in rare cases, r or s may be shorter than 20 bytes!
-        rstr = util.deflate_long(r, 0)
-        sstr = util.deflate_long(s, 0)
+        rstr = util.deflate_long(int(r_s[0][0]), 0)
+        sstr = util.deflate_long(int(r_s[0][1]), 0)
         if len(rstr) < 20:
             rstr = zero_byte * (20 - len(rstr)) + rstr
         if len(sstr) < 20:
@@ -132,10 +141,19 @@ class DSSKey (PKey):
         # pull out (r, s) which are NOT encoded as mpints
         sigR = util.inflate_long(sig[:20], 1)
         sigS = util.inflate_long(sig[20:], 1)
-        sigM = util.inflate_long(sha1(data).digest(), 1)
+        sig_asn1 = _DSSSigValue()
+        sig_asn1.setComponentByName('r', sigR)
+        sig_asn1.setComponentByName('s', sigS)
+        signature = encoder.encode(sig_asn1)
 
-        dss = DSA.construct((long(self.y), long(self.g), long(self.p), long(self.q)))
-        return dss.verify(sigM, (sigR, sigS))
+        dss = dsa.DSAPublicKey(self.p, self.q, self.g, self.y)
+        verifier = dss.verifier(signature, hashes.SHA1(), default_backend())
+        verifier.update(data)
+        try:
+            verifier.verify()
+            return True
+        except InvalidSignature:
+            return False
 
     def _encode_key(self):
         if self.x is None:
@@ -165,9 +183,10 @@ class DSSKey (PKey):
             by ``pyCrypto.PublicKey``).
         :return: new `.DSSKey` private key
         """
-        dsa = DSA.generate(bits, os.urandom, progress_func)
-        key = DSSKey(vals=(dsa.p, dsa.q, dsa.g, dsa.y))
-        key.x = dsa.x
+        dsa_params = dsa.DSAParameters.generate(bits, default_backend())
+        dss = dsa.DSAPrivateKey.generate(dsa_params, default_backend())
+        key = DSSKey(vals=(dsa_params.p, dsa_params.q, dsa_params.g, dss.y))
+        key.x = dss.x
         return key
     generate = staticmethod(generate)
 
