@@ -25,7 +25,10 @@ from binascii import hexlify, unhexlify
 import os
 from hashlib import md5
 
-from Crypto.Cipher import DES3, AES
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers.algorithms import AES, TripleDES
+from cryptography.hazmat.primitives.ciphers.base import Cipher
+from cryptography.hazmat.primitives.ciphers.modes import CBC
 
 from paramiko import util
 from paramiko.common import o600, zero_byte
@@ -40,8 +43,8 @@ class PKey (object):
 
     # known encryption types for private key files:
     _CIPHER_TABLE = {
-        'AES-128-CBC': {'cipher': AES, 'keysize': 16, 'blocksize': 16, 'mode': AES.MODE_CBC},
-        'DES-EDE3-CBC': {'cipher': DES3, 'keysize': 24, 'blocksize': 8, 'mode': DES3.MODE_CBC},
+        'AES-128-CBC': {'cipher': AES, 'keysize': 16, 'blocksize': 16, 'mode': CBC},
+        'DES-EDE3-CBC': {'cipher': TripleDES, 'keysize': 24, 'blocksize': 8, 'mode': CBC},
     }
 
     def __init__(self, msg=None, data=None):
@@ -300,7 +303,8 @@ class PKey (object):
         mode = self._CIPHER_TABLE[encryption_type]['mode']
         salt = unhexlify(b(saltstr))
         key = util.generate_key_bytes(md5, salt, password, keysize)
-        return cipher.new(key, mode, salt).decrypt(data)
+        decryptor = Cipher(cipher(key), mode(salt), default_backend()).decryptor()
+        return decryptor.update(data) + decryptor.finalize()
 
     def _write_private_key_file(self, tag, filename, data, password=None):
         """
@@ -337,7 +341,8 @@ class PKey (object):
                 #data += os.urandom(n)
                 # that would make more sense ^, but it confuses openssh.
                 data += zero_byte * n
-            data = cipher.new(key, mode, salt).encrypt(data)
+            encryptor = Cipher(cipher(key), mode(salt)).encryptor()
+            data = encryptor.update(data) + encryptor.finalize()
             f.write('Proc-Type: 4,ENCRYPTED\n')
             f.write('DEK-Info: %s,%s\n' % (cipher_name, u(hexlify(salt)).upper()))
             f.write('\n')

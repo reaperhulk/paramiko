@@ -297,7 +297,7 @@ class Packetizer (object):
                 self._log(DEBUG, 'Write packet <%s>, length %d' % (cmd_name, orig_len))
                 self._log(DEBUG, util.format_binary(packet, 'OUT: '))
             if self.__block_engine_out is not None:
-                out = self.__block_engine_out.encrypt(packet)
+                out = self.__block_engine_out.update(packet) # encrypt
             else:
                 out = packet
             # + mac
@@ -330,7 +330,7 @@ class Packetizer (object):
         """
         header = self.read_all(self.__block_size_in, check_rekey=True)
         if self.__block_engine_in is not None:
-            header = self.__block_engine_in.decrypt(header)
+            header = self.__block_engine_in.update(header) # decrypt
         if self.__dump_packets:
             self._log(DEBUG, util.format_binary(header, 'IN: '))
         packet_size = struct.unpack('>I', header[:4])[0]
@@ -342,7 +342,7 @@ class Packetizer (object):
         packet = buf[:packet_size - len(leftover)]
         post_packet = buf[packet_size - len(leftover):]
         if self.__block_engine_in is not None:
-            packet = self.__block_engine_in.decrypt(packet)
+            packet = self.__block_engine_in.update(packet) # decrypt
         if self.__dump_packets:
             self._log(DEBUG, util.format_binary(packet, 'IN: '))
         packet = leftover + packet
